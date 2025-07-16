@@ -1,0 +1,94 @@
+import speech_recognition as sr
+import pyttsx3
+import datetime
+import webbrowser
+import random
+
+def hablar(texto):
+    engine = pyttsx3.init()
+    engine.setProperty('voice', 'spanish-latin-am')
+    engine.say(texto)
+    engine.runAndWait()
+
+def escuchar():
+    r = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("Hola soy el asistente virtual de Indra ZOK")
+        try:
+            audio = r.listen(source)
+            texto = r.recognize_google(audio, language='es-CO')
+            print(f"Has dicho: {texto}")
+            return texto.lower()
+        except sr.UnknownValueError:
+            print("ZOK no entendió.")
+            return ""
+        except sr.RequestError as e:
+            print(f"Error en la solicitud a Google SR; {e}")
+            return ""
+
+def responder(pregunta):
+    if "hola" in pregunta or "saludos" in pregunta:
+        respuestas_hola = ["Hola humano, ¿en qué puedo ayudarte?", "Saludos cordiales.", "¡Hola! ¿Qué tal?", "Te saludo."]
+        hablar(random.choice(respuestas_hola))
+    elif "cómo estás" in pregunta:
+        respuestas_como_estas = ["Estoy bien, gracias por preguntar.", "Me siento genial.", "Todo en orden por aquí.", "Listo para ayudarte."]
+        hablar(random.choice(respuestas_como_estas))
+    elif "me alegra mucho" in pregunta:
+        respuestas_como_estas = ["gracias."]
+        hablar(random.choice(respuestas_como_estas))
+
+    elif "podrías darme la hora actual por favor" in pregunta:
+        now = datetime.datetime.now()
+        respuesta = f"Son las {now.hour} y {now.minute}."
+        hablar(respuesta)
+
+    elif "qué día es hoy" in pregunta:
+        now = datetime.datetime.now()
+        dia_semana = now.strftime("%A")
+        respuesta = f"Hoy es {dia_semana}."
+        hablar(respuesta)
+
+        
+    elif "buscar" in pregunta or "busca en google" in pregunta or "investiga" in pregunta or "qué es" in pregunta or "dime sobre" in pregunta:
+        termino_busqueda = ""
+        if "buscar" in pregunta:
+            indice_buscar = pregunta.find("buscar") + len("buscar")
+            termino_busqueda = pregunta[indice_buscar:].strip()
+        elif "busca en google" in pregunta:
+            indice_buscar = pregunta.find("busca en google") + len("busca en google")
+            termino_busqueda = pregunta[indice_buscar:].strip()
+        elif "investiga" in pregunta:
+            indice_buscar = pregunta.find("investiga") + len("investiga")
+            termino_busqueda = pregunta[indice_buscar:].strip()
+        elif "qué es" in pregunta:
+            indice_buscar = pregunta.find("qué es") + len("qué es")
+            termino_busqueda = pregunta[indice_buscar:].strip()
+        elif "dime sobre" in pregunta:
+            indice_buscar = pregunta.find("dime sobre") + len("dime sobre")
+            termino_busqueda = pregunta[indice_buscar:].strip()
+
+        print(f"Término de búsqueda extraído: '{termino_busqueda}'") # Línea de diagnóstico
+
+        if termino_busqueda:
+            url = f"https://www.google.com/search?q={termino_busqueda}&hl=es" # URL
+            hablar(f"Buscando {termino_busqueda} en la web.")
+            webbrowser.open_new_tab(url)
+            print("pregunta")
+        else:
+            hablar("¿Qué quieres que busque?")
+    elif "gracias" in pregunta or "adiós" in pregunta or "terminar" in pregunta:
+        hablar("De nada. ¡Hasta luego!")
+        return True
+    else:
+        hablar("Lo siento, no sé cómo responder a eso.")
+    return False
+
+###############
+if __name__ == "__main__":
+    hablar("Hola, soy ZOK. ¿En qué puedo ayudarte hoy?")
+    while True:
+        pregunta = escuchar()
+        if pregunta:
+            terminar_conversacion = responder(pregunta)
+            if terminar_conversacion:
+                break
