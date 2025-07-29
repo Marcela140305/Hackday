@@ -1,0 +1,45 @@
+import os
+import time
+from PIL import Image  # Para capturar pantalla
+import pytesseract
+
+# Carpeta de screenshots
+CARPETA_SCREENSHOTS = os.path.expanduser(r"C:\Users\jctarazonacw11\OneDrive - Indra\Documentos\reconocimiento voz\screenshots")
+
+# Configuración de pytesseract
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
+# Función para obtener el último screenshot
+def obtener_ultimo_screenshot():
+    archivos = [os.path.join(CARPETA_SCREENSHOTS, f)
+                for f in os.listdir(CARPETA_SCREENSHOTS)
+                if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    if not archivos:
+        return None
+    # Ordena por fecha de modificación (más reciente al final)
+    archivos.sort(key=os.path.getmtime)
+    return archivos[-1]
+
+# Función para esperar y obtener el nuevo screenshot
+def esperar_nuevo_screenshot(ultimo_archivo):
+    print("🕒 Esperando nuevo pantallazo... (tómalo con ImprPant o recortes)")
+    while True:
+        nuevo = obtener_ultimo_screenshot()
+        if nuevo and nuevo != ultimo_archivo:
+            print(f"🖼️ Nuevo screenshot detectado: {nuevo}")
+            return nuevo
+        time.sleep(1)
+
+# Función para procesar la imagen y extraer texto
+def procesar_imagen(ruta_imagen):
+    time.sleep(3) 
+    imagen = Image.open(ruta_imagen)
+    texto = pytesseract.image_to_string(imagen, lang='spa')
+    print("\n📝 Texto detectado:\n")
+    print(texto)
+
+    # ==== FLUJO PRINCIPAL ====
+if __name__ == "__main__":
+    archivo_anterior = obtener_ultimo_screenshot()
+    nuevo_archivo = esperar_nuevo_screenshot(archivo_anterior)
+    texto_detectado = procesar_imagen(nuevo_archivo)
