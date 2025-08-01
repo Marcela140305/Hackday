@@ -7,21 +7,28 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 import time
+import re
 
+# Ruta al ejecutable de ChromeDriver
 CHROMEDRIVER_PATH = "C:/Users/SoporteTI/Documents/chromedriver-win64/chromedriver-win64/chromedriver.exe"
 
+# Variables globales para el navegador y elementos detectados
 driver = None
 acciones_clickables = []
+campos_llenables = []
 
+# Palabras que ayudan a entender preguntas o comandos irrelevantes en clics
 PREGUNTAS_W = ["como", "que", "quien", "donde", "cuando", "por que", "porque"]
 IGNORAR_CLICK_EN = ["click", "clic", "dale"]
 
+# Hablar en voz alta utilizando pyttsx3
 def hablar(texto):
     engine = pyttsx3.init()
     engine.setProperty('voice', 'spanish-latin-am')
     engine.say(texto)
     engine.runAndWait()
 
+# Escucha comandos del micrófono y retorna el texto en minúsculas
 def escuchar():
     r = sr.Recognizer()
     with sr.Microphone() as source:
@@ -49,6 +56,7 @@ def escuchar():
             hablar("Hubo un error con el servicio de reconocimiento de voz.")
             return ""
 
+# Normaliza texto (quita tildes, minúsculas, signos)
 def normalizar_texto(texto, mantener_pregunta=False):
     texto = texto.lower()
     texto = unicodedata.normalize('NFD', texto)
@@ -57,27 +65,34 @@ def normalizar_texto(texto, mantener_pregunta=False):
         texto = texto.replace("\u00bf", "").replace("?", "")
     return texto.strip()
 
+# Elimina palabras como "clic", "dale", etc.
 def limpiar_comando(frase):
     palabras = frase.split()
     resultado = [p for p in palabras if p not in IGNORAR_CLICK_EN]
     return ' '.join(resultado)
 
+# Calcula similitud entre dos textos
 def similitud(a, b):
     return SequenceMatcher(None, a, b).ratio()
 
+# Verifica si un texto parece una pregunta (para evitar confundir con opción clicable)
 def es_pregunta_w(texto):
     texto = normalizar_texto(texto)
     return any(palabra in texto for palabra in PREGUNTAS_W)
 
+# Escanea la página actual y detecta elementos clicables y campos
 def escanear_elementos_clickables():
-    global acciones_clickables, driver
+    global acciones_clickables, campos_llenables, driver
     acciones_clickables = []
+    campos_llenables = []
     if not driver:
         return
     try:
         driver.switch_to.window(driver.window_handles[-1])
         time.sleep(2)
         elementos = driver.find_elements(By.XPATH, "//a | //button | //*[@onclick] | //*[@role='button'] | //img[@alt]")
+        inputs = driver.find_elements(By.XPATH, "//input | //textarea")
+
         vistos = set()
         for elem in elementos:
             try:
@@ -97,9 +112,77 @@ def escanear_elementos_clickables():
                         vistos.add(texto_norm)
             except Exception:
                 continue
+
+        for campo in inputs:
+            try:
+                label = campo.get_attribute("aria-label") or campo.get_attribute("placeholder") or campo.get_attribute("name")
+                if not label:
+                    label = driver.execute_script("return arguments[0].labels && arguments[0].labels[0] ? arguments[0].labels[0].innerText : ''", campo)
+                if label:
+                    campos_llenables.append({
+                        "texto": normalizar_texto(label),
+                        "original": label,
+                        "elemento": campo
+                    })
+            except Exception:
+                continue
     except Exception:
         hablar("Hubo un problema al escanear la página actual.")
 
+# Convierte frases habladas como "arroba", "punto" y quita espacios en contraseñas
+def procesar_valor(valor, campo_texto):
+    valor = valor.replace(" arroa ", "@").replace(" arroba ", "@").replace(" punto ", ".")
+    valor = valor.replace(" ", "") if "contrasena" in campo_texto or "password" in campo_texto else valor
+    return valor.strip()
+
+# Maneja la lógica de borrar o corregir un campo
+def borrar_o_corrigir_campo(comando):
+    global campos_llenables
+    escanear_elementos_clickables()
+    accion = "borrar" if "borr" in comando else "corregir"
+    patron = re.search(rf"{accion}\s+(?:el\s+)?(?:campo\s+)?(?:de\s+)?(.*?)\s*(?:con\s+(.*))?", comando)
+    if not patron:
+        hablar("No entendí qué campo quieres modificar.")
+        return
+    campo_texto = normalizar_texto(patron.group(1))
+    nuevo_valor = patron.group(2) if accion == "corregir" else None
+    coincidencias = buscar_opciones_mas_cercanas(campo_texto, campos_llenables)
+    if not coincidencias:
+        hablar(f"No encontré el campo {campo_texto}.")
+        return
+    campo = coincidencias[0]["elemento"]
+    campo.clear()
+    if accion == "corregir" and nuevo_valor:
+        nuevo_valor = procesar_valor(nuevo_valor, campo_texto)
+        campo.send_keys(nuevo_valor)
+        hablar(f"He corregido el campo {coincidencias[0]['original']} con {nuevo_valor}.")
+    else:
+        hablar(f"He borrado el contenido del campo {coincidencias[0]['original']}.")
+
+# Llena un campo con el valor dictado
+def llenar_campo_por_voz(comando):
+    global campos_llenables
+    patron = re.search(r"llen(a|ar)?(?:\s+el)?(?:\s+campo)?(?:\s+de)?\s+(.*?)\s+con\s+(.*)", comando)
+    if not patron:
+        hablar("No entendí el campo que deseas llenar.")
+        return
+
+    campo_texto = normalizar_texto(patron.group(2))
+    valor = patron.group(3).strip()
+    valor_procesado = procesar_valor(valor, campo_texto)
+
+    coincidencias = buscar_opciones_mas_cercanas(campo_texto, campos_llenables)
+
+    if coincidencias:
+        campo = coincidencias[0]["elemento"]
+        campo.clear()
+        campo.send_keys(valor_procesado)
+        if not ("contrasena" in campo_texto or "password" in campo_texto):
+            hablar(f"He llenado el campo de {coincidencias[0]['original']} con {valor_procesado}.")
+    else:
+        hablar(f"No encontré un campo relacionado con {campo_texto}.")
+
+# Busca opciones similares a lo dicho y ordena por similitud
 def buscar_opciones_mas_cercanas(frase_usuario, acciones, umbral_similitud=0.6, max_resultados=5):
     frase_normalizada = frase_usuario.lower().strip()
     coincidencias = []
@@ -111,6 +194,7 @@ def buscar_opciones_mas_cercanas(frase_usuario, acciones, umbral_similitud=0.6, 
     coincidencias.sort(key=lambda x: x[0], reverse=True)
     return [accion for _, accion in coincidencias[:max_resultados]]
 
+# Busca y hace clic en elementos, o pregunta por opciones si hay varias
 def buscar_y_click(frase):
     global acciones_clickables, driver
     if not driver:
@@ -132,7 +216,7 @@ def buscar_y_click(frase):
             hablar(f"He hecho click en {coincidencias[0]['original']}.")
             time.sleep(4)
             escanear_elementos_clickables()
-            hablar("Estoy listo, espero tus órdenes.")
+            hablar("Estoy lista, esperando órdenes.")
         except:
             hablar("No se pudo hacer click en el elemento.")
         return
@@ -142,32 +226,25 @@ def buscar_y_click(frase):
         print(f"{i}. {a['original']}")
         hablar(f"Opción {i}: {a['original']}.")
 
+    hablar("Dime el número de la opción o di 'cancelar'.")
+
     while True:
-        hablar("Dime el número de la opción o di 'cancelar'.")
         eleccion = escuchar()
         if not eleccion:
             continue
-
-        eleccion_norm = eleccion.strip().lower()
-        if any(x in eleccion_norm for x in ["cancelar", "salir", "ninguna"]):
+        if any(palabra in eleccion for palabra in ["cancelar", "salir", "ninguna"]):
             hablar("Cancelando la selección.")
             return
 
-        numeros = {
-            "uno": 1, "una": 1, "opcion uno": 1, "opción uno": 1,
-            "dos": 2, "opcion dos": 2, "opción dos": 2,
-            "tres": 3, "opcion tres": 3, "opción tres": 3,
-            "cuatro": 4, "opcion cuatro": 4, "opción cuatro": 4,
-            "cinco": 5, "opcion cinco": 5, "opción cinco": 5
-        }
-
+        numeros = {"uno": 1, "una": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5}
         idx = None
-        for palabra in eleccion_norm.split():
+        for palabra in eleccion.split():
             if palabra.isdigit():
                 idx = int(palabra)
                 break
-        if idx is None and eleccion_norm in numeros:
-            idx = numeros[eleccion_norm]
+            if palabra in numeros:
+                idx = numeros[palabra]
+                break
 
         if idx and 1 <= idx <= len(coincidencias):
             try:
@@ -175,13 +252,14 @@ def buscar_y_click(frase):
                 hablar(f"He hecho click en la opción {idx}: {coincidencias[idx - 1]['original']}.")
                 time.sleep(4)
                 escanear_elementos_clickables()
-                hablar("Estoy listo, espero tus órdenes.")
+                hablar("Estoy lista, esperando órdenes.")
             except:
                 hablar("No se pudo hacer click en el elemento seleccionado.")
             return
         else:
             hablar("No entendí el número, intenta de nuevo.")
 
+# Abre el navegador en una URL inicial y escanea automáticamente
 def abrir_pagina(palabra):
     global driver
     if not driver:
@@ -191,9 +269,10 @@ def abrir_pagina(palabra):
     driver.get("https://www.google.com")
     time.sleep(4)
     escanear_elementos_clickables()
-    hablar("Estoy listo, espero tus órdenes.")
+    hablar("Estoy lista, esperando órdenes.")
 
-if __name__ == "__main__":
+# Bucle principal del asistente
+def main():
     hablar("Hola, soy ZOK. ¿En qué puedo ayudarte hoy?")
     while True:
         comando = escuchar()
@@ -205,9 +284,45 @@ if __name__ == "__main__":
                     driver.back()
                     time.sleep(3)
                     escanear_elementos_clickables()
-                    hablar("Estoy listo, espero tus órdenes.")
+                    hablar("Estoy lista, esperando órdenes.")
             elif any(x in comando for x in ["terminar", "salir", "adiós", "chao"]):
                 hablar("De nada. ¡Hasta luego!")
                 break
+            elif "borrar" in comando or "corrige" in comando or "corregir" in comando:
+                borrar_o_corrigir_campo(comando)
+            elif "llenar" in comando or "llena" in comando:
+                llenar_campo_por_voz(comando)
             else:
                 buscar_y_click(comando)
+
+# Punto de entrada principal del asistente de voz.
+# Este bloque se ejecuta solo si el archivo se ejecuta directamente (no si se importa como módulo).
+if __name__ == "__main__":
+    hablar("Hola, soy ZOK. ¿En qué puedo ayudarte hoy?")
+    while True:
+        comando = escuchar()  # Espera entrada de voz del usuario
+        if comando:
+            # Comando para abrir Google
+            if "abrir" in comando and "google" in comando:
+                abrir_pagina("google")
+            # Comando para retroceder en el navegador
+            elif "regresar" in comando or "atrás" in comando:
+                if driver:
+                    driver.back()
+                    time.sleep(3)
+                    escanear_elementos_clickables()
+                    hablar("Estoy lista, esperando órdenes.")
+            # Comando para salir o finalizar sesión
+            elif any(x in comando for x in ["terminar", "salir", "adiós", "chao"]):
+                hablar("De nada. ¡Hasta luego!")
+                break
+            # Comando para borrar o corregir campos de formularios
+            elif "borrar" in comando or "corrige" in comando or "corregir" in comando:
+                borrar_o_corrigir_campo(comando)
+            # Comando para llenar campos con voz
+            elif "llenar" in comando or "llena" in comando:
+                llenar_campo_por_voz(comando)
+            # Por defecto, intenta buscar y hacer clic en algún elemento
+            else:
+                buscar_y_click(comando)
+
