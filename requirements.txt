@@ -1,1 +1,16 @@
-
+#VozAssistant/HACKDAY IA/Hackday.py
+SpeechRecognition
+pyttsx3
+selenium
+requests
+#VozAssistant/modulo_vision/Modulo_2.py
+mss
+pillow
+#VozAssistant/Modulo_1.py
+sounddevice
+pvporcupine
+supyr-struct
+vosk
+queuelib
+playsound
+azure-cognitiveservices-speech
