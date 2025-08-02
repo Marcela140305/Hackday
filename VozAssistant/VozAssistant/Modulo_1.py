@@ -35,12 +35,17 @@ from modulo_acciones.Modulo_5AccionesAlternativa import iniciar_driver
 KeyWord_Start = "ok google"
 KeyWord_Stop = "gracias"
 Vosk_Model_Path = r"C:\Users\user\Desktop\VozAssistant\models-es\vosk-model-small-es-0.42"
+
+# Complementos auditivos
 Beep_Sound_Path = "sound.mp3"
 Validacion = "validacion.mp3"
 Ayuda = "pedir_ayuda.mp3"
 ejecutando_accion = "ayudando.mp3"
 NoAyuda = "NoAyudar.mp3"
-
+Presentacion = "Inicio_Presentacion.mp3"
+guia = "guia.mp3"
+confirma_accion = "accion_realizada.mp3"
+atento_a_solicitud = "esperando_otra_solicitud.mp3"
 
 
 # Configuración de Vosk y el audio
@@ -97,7 +102,9 @@ def consulta_requiere_ayuda(texto):
     acciones_clave = [
         "iniciar sesión", "inicia sesión", "crear cuenta", 
         "crear una cuenta", "registrarme", "registro", "buscar",
-        "consultar producto", "averiguar"
+        "consultar producto", "averiguar", "mis compras", "ofertas",
+        "cupones", "supermercado", "moda", "vender", "Ayuda", "PQR",
+        "peticiones", "quejas", "reclamos", "carrito", "carro de compras"
     ]
     return any(accion in texto for accion in acciones_clave)
 
@@ -128,7 +135,8 @@ def guardar_nueva_peticion(texto):
 def main():
     # Ejecución del driver de chrome
     driver_global = iniciar_driver()
-
+    playsound(Presentacion)
+    playsound(guia)
     print("Esperando clave para iniciar asistente...")
     porcupine = pvporcupine.create(
     access_key="cF9n3Sjf/2nCTeNIggDxieL1Raqs7AVUiEXum3g4vtSJG35WmF1rsg==",
@@ -154,7 +162,7 @@ def main():
                 leer_respuesta_y_hablar("respuesta.txt")
                 # Confirmar si se desea ejecutar la acción 
                 if consulta_requiere_ayuda(leer_transcripcion()):
-                    leer_respuesta_y_hablar("respuesta.txt")
+                    #leer_respuesta_y_hablar("respuesta.txt")
                     playsound(Ayuda)
                     if esperar_confirmacion_usuario():
                         playsound(ejecutando_accion)
@@ -162,9 +170,11 @@ def main():
                         guardar_nueva_peticion(nueva_peticion_usuario)
                         resultado = ejecutar_accion_externa(nueva_peticion_usuario, driver_global)
                         if resultado:
-                            playsound("accion_exitosa.mp3")
+                            playsound(confirma_accion)
+                            playsound(Beep_Sound_Path) 
                     else:
-                        playsound(NoAyuda)
+                        playsound(atento_a_solicitud)
+                        playsound(Beep_Sound_Path)
 
 
                 print("Esperando de nuevo palabra clave...")
