@@ -25,6 +25,11 @@ DESCRIPCIÓN DE PANTALLA FINAL:
 {descripcion_final}
 
 Responde la pregunta del usuario basándote en el contexto visual y su petición.
+
+RECOMENDACIÓN FINAL PARA RESPUESTAS:
+1) Se conciso en tus respuestas basado en el contexto que se te da y no des tanto detalle si no es explicitamente solicitado
+2) Ten en cuenta que si la petición del usuario solicita autocompletar formularios o inicios de sesión, debes indicar que no tienes la autorización para manejar datos personales pero que puedes indicarle que campos debe llenar segun lo que se visualiza en pantalla.
+# Esto solo debes decirlo en caso que la petición sea completar o llenar un formulario o inicio de sesión. En las demas consultas no debes mencionar esta restricción.
 """
     return prompt
 
